@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: chat_app_postgres
+    # Host 5433 avoids clashing with a local Windows PostgreSQL on 5432.
+    ports:
+      - '5433:5432'
+    environment:
+      POSTGRES_DB: chat_app
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - chat_app_pgdata:/var/lib/postgresql/data
+
+volumes:
+  chat_app_pgdata:

@@ -1,0 +1,225 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  user
+  moderator
+  admin
+}
+
+enum FriendshipStatus {
+  pending
+  accepted
+  declined
+  blocked
+}
+
+enum RoomType {
+  public
+  private
+  dm
+}
+
+enum RoomMemberRole {
+  member
+  admin
+  mod
+  owner
+}
+
+enum MessageKind {
+  text
+  attachment
+  mixed
+  system
+}
+
+/** Browser / device refresh-token session (multi-device login). */
+model AuthSession {
+  id               String   @id @default(uuid()) @db.Uuid
+  userId           String   @db.Uuid
+  refreshTokenHash String
+  userAgent        String   @default("")
+  ipAddress        String   @default("")
+  createdAt        DateTime @default(now())
+  expiresAt        DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model User {
+  id                String   @id @default(uuid()) @db.Uuid
+  email             String   @unique
+  username          String   @unique
+  passwordHash      String
+  displayName       String
+  /** Relative path under upload root, e.g. `avatars/uuid.jpg`. */
+  avatarStoragePath String?
+  role              Role     @default(user)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  passwordResetToken String?
+  passwordResetExpires DateTime?
+
+  authSessions    AuthSession[]
+  createdRooms  Room[]        @relation("RoomCreatedBy")
+  roomMembers   RoomMember[]
+  sentMessages  Message[]
+  attachments   Attachment[]  @relation("AttachmentUploader")
+  friendshipsAsRequester Friendship[] @relation("FriendshipRequester")
+  friendshipsAsAddressee Friendship[] @relation("FriendshipAddressee")
+  bansIssued    UserBan[]     @relation("UserBanIssuer")
+  bansReceived  UserBan[]     @relation("UserBanTarget")
+  roomBans      RoomBan[]     @relation("RoomBanSubject")
+  roomBansIssued RoomBan[]    @relation("RoomBanActor")
+  chatReadStates ChatReadState[]
+}
+
+model UserBan {
+  id           String   @id @default(uuid()) @db.Uuid
+  bannerId     String   @db.Uuid
+  bannedUserId String   @db.Uuid
+  createdAt    DateTime @default(now())
+
+  banner User @relation("UserBanIssuer", fields: [bannerId], references: [id], onDelete: Cascade)
+  banned User @relation("UserBanTarget", fields: [bannedUserId], references: [id], onDelete: Cascade)
+
+  @@unique([bannerId, bannedUserId])
+  @@index([bannedUserId])
+}
+
+model Friendship {
+  id             String           @id @default(uuid()) @db.Uuid
+  requesterId    String           @db.Uuid
+  addresseeId    String           @db.Uuid
+  status         FriendshipStatus @default(pending)
+  requestMessage String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  requester User @relation("FriendshipRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  addressee User @relation("FriendshipAddressee", fields: [addresseeId], references: [id], onDelete: Cascade)
+
+  @@unique([requesterId, addresseeId])
+  @@index([addresseeId, status])
+}
+
+model Room {
+  id          String    @id @default(uuid()) @db.Uuid
+  type        RoomType
+  name        String?
+  description String    @default("")
+  createdById String    @db.Uuid
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  createdBy   User        @relation("RoomCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  members     RoomMember[]
+  messages    Message[]
+  roomBans    RoomBan[]
+  chatReadStates ChatReadState[]
+
+  @@unique([name])
+  @@index([type])
+}
+
+model RoomBan {
+  id         String   @id @default(uuid()) @db.Uuid
+  roomId     String   @db.Uuid
+  userId     String   @db.Uuid
+  bannedById String?  @db.Uuid
+  createdAt  DateTime @default(now())
+
+  room     Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user     User @relation("RoomBanSubject", fields: [userId], references: [id], onDelete: Cascade)
+  bannedBy User? @relation("RoomBanActor", fields: [bannedById], references: [id], onDelete: SetNull)
+
+  @@unique([roomId, userId])
+  @@index([userId])
+  @@index([bannedById])
+}
+
+model RoomMember {
+  id       String         @id @default(uuid()) @db.Uuid
+  roomId   String         @db.Uuid
+  userId   String         @db.Uuid
+  role     RoomMemberRole @default(member)
+  joinedAt DateTime       @default(now())
+
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, userId])
+  @@index([userId])
+}
+
+model Message {
+  id        String      @id @default(uuid()) @db.Uuid
+  roomId    String      @db.Uuid
+  senderId  String      @db.Uuid
+  kind      MessageKind @default(text)
+  body      String?
+  createdAt DateTime    @default(now())
+  editedAt  DateTime?
+  deletedAt DateTime?
+  replyToId String?     @db.Uuid
+
+  room    Room      @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  sender  User      @relation(fields: [senderId], references: [id], onDelete: Restrict)
+  replyTo Message?  @relation("MessageThreadReply", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies Message[] @relation("MessageThreadReply")
+
+  attachments Attachment[]
+  readPointers ChatReadState[] @relation("ReadUpToMessage")
+
+  @@index([roomId, createdAt])
+  @@index([replyToId])
+}
+
+/** Per-user read cursor for a room (DM or group). */
+model ChatReadState {
+  id                String   @id @default(uuid()) @db.Uuid
+  userId            String   @db.Uuid
+  roomId            String   @db.Uuid
+  lastReadMessageId String?  @db.Uuid
+  updatedAt         DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  lastReadMessage Message? @relation("ReadUpToMessage", fields: [lastReadMessageId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, roomId])
+  @@index([userId])
+}
+
+model Attachment {
+  id           String   @id @default(uuid()) @db.Uuid
+  messageId    String?  @db.Uuid
+  uploaderId   String   @db.Uuid
+  mimeType     String
+  originalName String
+  storagePath  String
+  sizeBytes    Int
+  width        Int?
+  height       Int?
+  createdAt    DateTime @default(now())
+
+  message  Message? @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  uploader User     @relation("AttachmentUploader", fields: [uploaderId], references: [id], onDelete: Restrict)
+
+  @@index([messageId])
+  @@index([uploaderId])
+}

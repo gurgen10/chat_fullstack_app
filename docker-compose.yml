@@ -1,0 +1,92 @@
+services:
+  # One-shot: npm install for BE + FE into named volumes (backend_node_modules / frontend_node_modules).
+  deps:
+    image: node:22-bookworm-slim
+    working_dir: /workspace
+    volumes:
+      - ./chat_app_be:/workspace/chat_app_be
+      - ./chat_app_fe:/workspace/chat_app_fe
+      - backend_node_modules:/workspace/chat_app_be/node_modules
+      - frontend_node_modules:/workspace/chat_app_fe/node_modules
+      - ./scripts/docker-install-deps.sh:/workspace/docker-install-deps.sh:ro
+    command: ["/bin/sh", "/workspace/docker-install-deps.sh"]
+    restart: "no"
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: chat_app
+    # Host 5433 avoids clashing with a local Windows PostgreSQL install on 5432.
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./chat_app_be
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/chat_app?schema=public
+      JWT_SECRET: ${JWT_SECRET:-change-me}
+      PORT: 3000
+      UPLOAD_DIR: /app/uploads
+    volumes:
+      - ./chat_app_be:/app
+      - backend_node_modules:/app/node_modules
+      - backend_uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      deps:
+        condition: service_completed_successfully
+    command: >
+      sh -c "npx prisma migrate deploy && npm run start:dev"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\"",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+      start_period: 120s
+
+  frontend:
+    build:
+      context: ./chat_app_fe
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    environment:
+      # Dev proxy target inside the Docker network (do not use localhost here).
+      API_UPSTREAM: http://backend:3000
+    volumes:
+      - ./chat_app_fe:/app
+      - frontend_node_modules:/app/node_modules
+    depends_on:
+      backend:
+        condition: service_healthy
+    # Ensure API_UPSTREAM is set for the Vite process (proxy target; localhost here = FE container only → 502).
+    command:
+      - sh
+      - -c
+      - |
+        export API_UPSTREAM=http://backend:3000
+        exec npm run dev:client -- --host 0.0.0.0 --port 5173
+
+volumes:
+  postgres_data:
+  backend_node_modules:
+  backend_uploads:
+  frontend_node_modules:

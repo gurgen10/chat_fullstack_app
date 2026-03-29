@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 56" fill="none" aria-label="Gug DataArt">
+  <defs>
+    <linearGradient id="lg-sun" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#fcd34d"/>
+    </linearGradient>
+    <linearGradient id="lg-moon" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#c4b5fd"/>
+      <stop offset="100%" stop-color="#7c3aed"/>
+    </linearGradient>
+    <linearGradient id="lg-text-gug" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#fef3c7"/>
+      <stop offset="100%" stop-color="#fbbf24"/>
+    </linearGradient>
+    <linearGradient id="lg-text-da" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#e9d5ff"/>
+      <stop offset="100%" stop-color="#a78bfa"/>
+    </linearGradient>
+  </defs>
+  <!-- Sun icon -->
+  <g transform="translate(0, 8)">
+    <circle cx="20" cy="20" r="11" fill="url(#lg-sun)"/>
+    <g stroke="#fff7ed" stroke-width="1.5" stroke-linecap="round" opacity="0.85">
+      <path d="M20 4v3M20 33v3M4 20h3M33 20h3M9.5 9.5l2.2 2.2M28.3 28.3l2.2 2.2M9.5 30.5l2.2-2.2M28.3 11.7l2.2-2.2"/>
+    </g>
+  </g>
+  <!-- Gug -->
+  <text x="48" y="38" font-family="system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, sans-serif" font-size="28" font-weight="700" fill="url(#lg-text-gug)">Gug</text>
+  <!-- separator dot -->
+  <circle cx="138" cy="30" r="3" fill="#475569"/>
+  <!-- Moon icon -->
+  <g transform="translate(152, 8)">
+    <circle cx="20" cy="20" r="11" fill="url(#lg-moon)"/>
+    <circle cx="27" cy="20" r="8.5" fill="#0f172a"/>
+  </g>
+  <!-- DataArt -->
+  <text x="200" y="38" font-family="system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, sans-serif" font-size="28" font-weight="700" fill="url(#lg-text-da)">DataArt</text>
+</svg>

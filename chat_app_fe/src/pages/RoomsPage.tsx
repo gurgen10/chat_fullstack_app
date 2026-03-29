@@ -15,6 +15,8 @@ import type { MyRoomSummary, PublicRoomCatalogItem } from "../types";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { UnreadBadge } from "../components/UnreadBadge";
 
+const ROOM_DESCRIPTION_MAX = 500;
+
 function canInviteToPrivate(role: string) {
   return role === "owner" || role === "admin" || role === "mod";
 }
@@ -142,7 +144,7 @@ export default function RoomsPage() {
             the catalog.
           </p>
           <form
-            className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap"
+            className="mt-4 space-y-3"
             onSubmit={async (e) => {
               e.preventDefault();
               if (!newName.trim()) return;
@@ -164,38 +166,56 @@ export default function RoomsPage() {
               }
             }}
           >
-            <input
-              className="min-w-[12rem] flex-1 rounded-lg border border-white/10 bg-slate-950/80 px-3 py-2 text-sm"
-              placeholder="Room name"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              disabled={busy}
-            />
-            <select
-              className="rounded-lg border border-white/10 bg-slate-950/80 px-3 py-2 text-sm"
-              value={newType}
-              onChange={(e) =>
-                setNewType(e.target.value === "private" ? "private" : "public")
-              }
-              disabled={busy}
-            >
-              <option value="public">Public</option>
-              <option value="private">Private</option>
-            </select>
-            <input
-              className="min-w-[12rem] flex-[2] rounded-lg border border-white/10 bg-slate-950/80 px-3 py-2 text-sm"
-              placeholder="Description (optional)"
-              value={newDesc}
-              onChange={(e) => setNewDesc(e.target.value)}
-              disabled={busy}
-            />
-            <button
-              type="submit"
-              disabled={busy || !newName.trim()}
-              className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-500 disabled:opacity-50"
-            >
-              Create
-            </button>
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+              <input
+                className="min-w-[12rem] flex-1 rounded-lg border border-white/10 bg-slate-950/80 px-3 py-2 text-sm"
+                placeholder="Room name"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                disabled={busy}
+              />
+              <select
+                className="rounded-lg border border-white/10 bg-slate-950/80 px-3 py-2 text-sm"
+                value={newType}
+                onChange={(e) =>
+                  setNewType(e.target.value === "private" ? "private" : "public")
+                }
+                disabled={busy}
+              >
+                <option value="public">Public</option>
+                <option value="private">Private</option>
+              </select>
+              <button
+                type="submit"
+                disabled={busy || !newName.trim()}
+                className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-500 disabled:opacity-50 sm:shrink-0"
+              >
+                Create
+              </button>
+            </div>
+            <div>
+              <label
+                htmlFor="new-room-description"
+                className="mb-1 block text-xs font-medium text-slate-500"
+              >
+                Description (optional)
+              </label>
+              <textarea
+                id="new-room-description"
+                rows={3}
+                maxLength={ROOM_DESCRIPTION_MAX}
+                className="min-h-[4.5rem] w-full resize-y rounded-lg border border-white/10 bg-slate-950/80 px-3 py-2 text-sm leading-relaxed text-slate-100 placeholder:text-slate-500"
+                placeholder="What is this room about?"
+                value={newDesc}
+                onChange={(e) =>
+                  setNewDesc(e.target.value.slice(0, ROOM_DESCRIPTION_MAX))
+                }
+                disabled={busy}
+              />
+              <p className="mt-1 text-right text-[0.65rem] tabular-nums text-slate-500">
+                {newDesc.length}/{ROOM_DESCRIPTION_MAX}
+              </p>
+            </div>
           </form>
         </section>
 

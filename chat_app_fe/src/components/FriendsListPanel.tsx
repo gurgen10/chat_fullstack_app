@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   contactPresenceFromMap,
@@ -8,8 +8,12 @@ import {
   type PublicUser,
 } from "../types";
 import { ConfirmModal } from "./ConfirmModal";
+import { Modal } from "./Modal";
 import { UnreadBadge } from "./UnreadBadge";
 import { UserAvatar } from "./UserAvatar";
+
+/** Max length for username and request note/message in friend-request dialogs. */
+const FRIEND_REQ_FIELD_MAX = 255;
 
 type Props = {
   friends: PublicUser[];
@@ -34,7 +38,7 @@ type Props = {
   onCancelOutgoing: (id: string) => Promise<void>;
   onRemoveFriend: (peerId: string) => Promise<void>;
   onBanUser: (input: { username?: string; userId?: string }) => Promise<void>;
-  onRequestFromDiscover: (user: PublicUser) => Promise<void>;
+  onRequestFromDiscover: (user: PublicUser, message?: string) => Promise<void>;
   title?: string;
 };
 
@@ -62,6 +66,23 @@ function friendActionConfirm(p: PendingFriendAction): {
     confirmLabel: "Ban",
     destructive: true,
   };
+}
+
+function MoreVerticalIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden
+    >
+      <circle cx="12" cy="5" r="1.75" />
+      <circle cx="12" cy="12" r="1.75" />
+      <circle cx="12" cy="19" r="1.75" />
+    </svg>
+  );
 }
 
 function UsersIcon({ className }: { className?: string }) {
@@ -119,11 +140,25 @@ export function FriendsListPanel({
     return "Offline";
   }
 
-  const [reqUsername, setReqUsername] = useState("");
-  const [reqNote, setReqNote] = useState("");
+  const [sendByUsernameOpen, setSendByUsernameOpen] = useState(false);
+  const [dialogUsername, setDialogUsername] = useState("");
+  const [dialogNote, setDialogNote] = useState("");
+  const [discoverTarget, setDiscoverTarget] = useState<PublicUser | null>(null);
+  const [discoverMessage, setDiscoverMessage] = useState("");
   const [localErr, setLocalErr] = useState<string | null>(null);
   const [pending, setPending] = useState<PendingFriendAction | null>(null);
   const [confirmBusy, setConfirmBusy] = useState(false);
+  const [friendMenuOpenId, setFriendMenuOpenId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!friendMenuOpenId) return;
+    function onDoc(e: MouseEvent) {
+      const el = document.getElementById(`friend-actions-${friendMenuOpenId}`);
+      if (!el?.contains(e.target as Node)) setFriendMenuOpenId(null);
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [friendMenuOpenId]);
 
   const confirmCopy = pending ? friendActionConfirm(pending) : null;
 
@@ -146,18 +181,56 @@ export function FriendsListPanel({
     }
   }
 
-  async function submitRequestByUsername(e: React.FormEvent) {
-    e.preventDefault();
+  function openSendByUsernameDialog() {
     setLocalErr(null);
-    const u = reqUsername.trim();
+    setDialogUsername("");
+    setDialogNote("");
+    setSendByUsernameOpen(true);
+  }
+
+  function closeSendByUsernameDialog() {
+    if (busy) return;
+    setSendByUsernameOpen(false);
+    setDialogUsername("");
+    setDialogNote("");
+  }
+
+  async function submitSendByUsername() {
+    const u = dialogUsername.trim();
     if (!u) return;
+    setLocalErr(null);
     try {
       await onSendFriendRequest({
         username: u,
-        message: reqNote.trim() || undefined,
+        message: dialogNote.trim() || undefined,
       });
-      setReqUsername("");
-      setReqNote("");
+      closeSendByUsernameDialog();
+    } catch (err) {
+      setLocalErr(err instanceof Error ? err.message : "Request failed");
+    }
+  }
+
+  function openDiscoverDialog(user: PublicUser) {
+    setLocalErr(null);
+    setDiscoverMessage("");
+    setDiscoverTarget(user);
+  }
+
+  function closeDiscoverDialog() {
+    if (busy) return;
+    setDiscoverTarget(null);
+    setDiscoverMessage("");
+  }
+
+  async function submitDiscoverRequest() {
+    if (!discoverTarget) return;
+    setLocalErr(null);
+    try {
+      await onRequestFromDiscover(
+        discoverTarget,
+        discoverMessage.trim() || undefined,
+      );
+      closeDiscoverDialog();
     } catch (err) {
       setLocalErr(err instanceof Error ? err.message : "Request failed");
     }
@@ -171,11 +244,8 @@ export function FriendsListPanel({
         </span>
         <div className="min-w-0">
           <h2 className="text-sm font-semibold tracking-tight text-white">
-            {title}
-          </h2>
-          <p className="text-xs text-slate-500">
             {friends.length} friend{friends.length === 1 ? "" : "s"}
-          </p>
+          </h2>
         </div>
       </div>
 
@@ -193,33 +263,14 @@ export function FriendsListPanel({
           ) : null}
 
           <section className="rounded-2xl border border-white/10 bg-slate-950/40 p-3">
-            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Add friend
-            </h3>
-            <form onSubmit={submitRequestByUsername} className="flex flex-col gap-2">
-              <input
-                className="w-full rounded-lg border border-white/10 bg-slate-900/90 px-3 py-2 text-sm text-white placeholder:text-slate-500"
-                placeholder="Username"
-                value={reqUsername}
-                onChange={(e) => setReqUsername(e.target.value)}
-                disabled={busy}
-                autoComplete="off"
-              />
-              <input
-                className="w-full rounded-lg border border-white/10 bg-slate-900/90 px-3 py-2 text-sm text-white placeholder:text-slate-500"
-                placeholder="Optional note with request"
-                value={reqNote}
-                onChange={(e) => setReqNote(e.target.value)}
-                disabled={busy}
-              />
-              <button
-                type="submit"
-                disabled={busy || !reqUsername.trim()}
-                className="rounded-lg bg-sky-600 px-3 py-2 text-sm font-medium text-white hover:bg-sky-500 disabled:opacity-50"
-              >
-                Send request
-              </button>
-            </form>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={openSendByUsernameDialog}
+              className="w-full rounded-lg bg-sky-600 px-3 py-2.5 text-sm font-medium text-white hover:bg-sky-500 disabled:opacity-50"
+            >
+              Send request
+            </button>
           </section>
 
           {incoming.length > 0 ? (
@@ -314,7 +365,7 @@ export function FriendsListPanel({
                   return (
                     <li key={f.id}>
                       <div
-                        className={`rounded-xl px-2 py-2 transition ${
+                        className={`flex items-start gap-1 rounded-xl px-2 py-2 transition ${
                           active
                             ? "bg-sky-600/25 ring-1 ring-sky-500/40"
                             : "hover:bg-white/5"
@@ -323,7 +374,7 @@ export function FriendsListPanel({
                         <button
                           type="button"
                           onClick={() => onSelectFriend(f.id)}
-                          className="flex w-full items-center gap-3 text-left"
+                          className="flex min-w-0 flex-1 items-center gap-3 text-left"
                         >
                           <span className="relative shrink-0">
                             <UserAvatar
@@ -351,25 +402,57 @@ export function FriendsListPanel({
                             </span>
                           </span>
                         </button>
-                        <div className="mt-1 flex gap-2 px-1 pb-1">
+                        <div
+                          id={`friend-actions-${f.id}`}
+                          className="relative shrink-0"
+                        >
                           <button
                             type="button"
                             disabled={busy}
-                            onClick={() =>
-                              setPending({ kind: "remove", user: f })
-                            }
-                            className="text-[0.65rem] text-slate-500 underline hover:text-slate-300 disabled:opacity-50"
+                            aria-label={`Actions for ${f.displayName}`}
+                            aria-expanded={friendMenuOpenId === f.id}
+                            aria-haspopup="menu"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setFriendMenuOpenId((id) =>
+                                id === f.id ? null : f.id,
+                              );
+                            }}
+                            className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-white/10 hover:text-slate-200 disabled:opacity-50"
                           >
-                            Remove
+                            <MoreVerticalIcon className="h-5 w-5" />
                           </button>
-                          <button
-                            type="button"
-                            disabled={busy}
-                            onClick={() => setPending({ kind: "ban", user: f })}
-                            className="text-[0.65rem] text-red-400/90 underline hover:text-red-300 disabled:opacity-50"
-                          >
-                            Ban
-                          </button>
+                          {friendMenuOpenId === f.id ? (
+                            <div
+                              role="menu"
+                              className="absolute right-0 top-full z-10 mt-0.5 min-w-[7.5rem] rounded-lg border border-white/10 bg-slate-900 py-1 shadow-lg shadow-black/40"
+                            >
+                              <button
+                                type="button"
+                                role="menuitem"
+                                disabled={busy}
+                                className="flex w-full px-3 py-2 text-left text-xs text-slate-200 hover:bg-white/10 disabled:opacity-50"
+                                onClick={() => {
+                                  setFriendMenuOpenId(null);
+                                  setPending({ kind: "remove", user: f });
+                                }}
+                              >
+                                Remove
+                              </button>
+                              <button
+                                type="button"
+                                role="menuitem"
+                                disabled={busy}
+                                className="flex w-full px-3 py-2 text-left text-xs text-red-400 hover:bg-red-500/10 disabled:opacity-50"
+                                onClick={() => {
+                                  setFriendMenuOpenId(null);
+                                  setPending({ kind: "ban", user: f });
+                                }}
+                              >
+                                Ban
+                              </button>
+                            </div>
+                          ) : null}
                         </div>
                       </div>
                     </li>
@@ -389,6 +472,12 @@ export function FriendsListPanel({
               ) : (
                 discoverUsers.map((u) => {
                   const isFriend = friends.some((x) => x.id === u.id);
+                  const hasOutgoingRequest = outgoing.some(
+                    (r) => r.addressee.id === u.id,
+                  );
+                  const hasIncomingRequest = incoming.some(
+                    (r) => r.requester.id === u.id,
+                  );
                   return (
                     <li key={u.id}>
                       <div className="flex items-center gap-2 rounded-xl px-2 py-2 hover:bg-white/5">
@@ -404,14 +493,28 @@ export function FriendsListPanel({
                           </p>
                         </div>
                         {isFriend ? (
-                          <span className="text-[0.65rem] text-slate-500">
+                          <span className="shrink-0 text-[0.65rem] text-slate-500">
                             Friend
+                          </span>
+                        ) : hasOutgoingRequest ? (
+                          <span
+                            className="shrink-0 text-[0.65rem] font-medium text-slate-500"
+                            title="You already sent a friend request"
+                          >
+                            Request sent
+                          </span>
+                        ) : hasIncomingRequest ? (
+                          <span
+                            className="shrink-0 text-[0.65rem] font-medium text-emerald-500/90"
+                            title="They sent you a request — use Requests for you above"
+                          >
+                            Request received
                           </span>
                         ) : (
                           <button
                             type="button"
                             disabled={busy}
-                            onClick={() => onRequestFromDiscover(u)}
+                            onClick={() => openDiscoverDialog(u)}
                             className="shrink-0 rounded-lg border border-sky-500/40 px-2 py-1 text-[0.65rem] font-medium text-sky-300 hover:bg-sky-500/10 disabled:opacity-50"
                           >
                             Add
@@ -456,6 +559,154 @@ export function FriendsListPanel({
           onConfirm={executePending}
         />
       ) : null}
+
+      <Modal
+        open={sendByUsernameOpen}
+        title="Send friend request"
+        titleId="friend-req-username-title"
+        showCloseButton={false}
+        onClose={closeSendByUsernameDialog}
+        footer={
+          <>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={closeSendByUsernameDialog}
+              className="rounded-lg border border-white/15 px-4 py-2 text-sm font-medium text-slate-300 hover:bg-white/5 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={busy || !dialogUsername.trim()}
+              onClick={() => void submitSendByUsername()}
+              className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-500 disabled:opacity-50"
+            >
+              {busy ? "…" : "Send"}
+            </button>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-3">
+          <div>
+            <label
+              htmlFor="friend-req-username"
+              className="mb-1 block text-xs font-medium text-slate-400"
+            >
+              Username
+            </label>
+            <input
+              id="friend-req-username"
+              className="w-full rounded-lg border border-white/10 bg-slate-900/90 px-3 py-2 text-sm text-white placeholder:text-slate-500"
+              placeholder="Username"
+              value={dialogUsername}
+              onChange={(e) =>
+                setDialogUsername(
+                  e.target.value.slice(0, FRIEND_REQ_FIELD_MAX),
+                )
+              }
+              maxLength={FRIEND_REQ_FIELD_MAX}
+              disabled={busy}
+              autoComplete="off"
+            />
+          </div>
+          <div>
+            <div className="mb-1 flex items-baseline justify-between gap-2">
+              <label
+                htmlFor="friend-req-note"
+                className="block text-xs font-medium text-slate-400"
+              >
+                Optional note
+              </label>
+              <span className="text-[0.65rem] text-slate-500">
+                {dialogNote.length}/{FRIEND_REQ_FIELD_MAX}
+              </span>
+            </div>
+            <textarea
+              id="friend-req-note"
+              rows={3}
+              className="min-h-[4.5rem] w-full resize-y rounded-lg border border-white/10 bg-slate-900/90 px-3 py-2 text-sm leading-relaxed text-white placeholder:text-slate-500"
+              placeholder="Optional note with request"
+              value={dialogNote}
+              onChange={(e) =>
+                setDialogNote(e.target.value.slice(0, FRIEND_REQ_FIELD_MAX))
+              }
+              maxLength={FRIEND_REQ_FIELD_MAX}
+              disabled={busy}
+            />
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={discoverTarget !== null}
+        title={
+          discoverTarget
+            ? `Add ${discoverTarget.displayName}`
+            : "Add friend"
+        }
+        titleId="friend-req-discover-title"
+        showCloseButton={false}
+        onClose={closeDiscoverDialog}
+        footer={
+          <>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={closeDiscoverDialog}
+              className="rounded-lg border border-white/15 px-4 py-2 text-sm font-medium text-slate-300 hover:bg-white/5 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void submitDiscoverRequest()}
+              className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-500 disabled:opacity-50"
+            >
+              {busy ? "…" : "Send"}
+            </button>
+          </>
+        }
+      >
+        {discoverTarget ? (
+          <div className="flex flex-col gap-3">
+            <p className="text-sm text-slate-400">
+              Request will be sent to{" "}
+              <span className="font-medium text-slate-200">
+                @{discoverTarget.username}
+              </span>
+            </p>
+            <div>
+              <div className="mb-1 flex items-baseline justify-between gap-2">
+                <label
+                  htmlFor="friend-req-discover-msg"
+                  className="block text-xs font-medium text-slate-400"
+                >
+                  Optional message
+                </label>
+                <span className="text-[0.65rem] text-slate-500">
+                  {discoverMessage.length}/{FRIEND_REQ_FIELD_MAX}
+                </span>
+              </div>
+              <textarea
+                id="friend-req-discover-msg"
+                rows={4}
+                className="min-h-[5.5rem] w-full resize-y rounded-lg border border-white/10 bg-slate-900/90 px-3 py-2 text-sm leading-relaxed text-white placeholder:text-slate-500"
+                placeholder="Optional message with your request"
+                value={discoverMessage}
+                onChange={(e) =>
+                  setDiscoverMessage(
+                    e.target.value.slice(0, FRIEND_REQ_FIELD_MAX),
+                  )
+                }
+                maxLength={FRIEND_REQ_FIELD_MAX}
+                disabled={busy}
+              />
+            </div>
+          </div>
+        ) : null}
+      </Modal>
     </div>
   );
 }

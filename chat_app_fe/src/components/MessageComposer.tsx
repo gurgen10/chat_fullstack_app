@@ -25,6 +25,12 @@ type Props = {
   /** When set, the next send includes `replyToMessageId`. */
   replyingTo?: ChatMessage | null;
   onCancelReply?: () => void;
+  /** When set, the composer edits this message; primary action calls `onSaveEdit` instead of `onSend`. */
+  editingMessage?: ChatMessage | null;
+  onCancelEdit?: () => void;
+  onSaveEdit?: (messageId: string, text: string) => Promise<void>;
+  /** True while `onSaveEdit` is in progress. */
+  editBusy?: boolean;
 };
 
 function ImageIcon({ className }: { className?: string }) {
@@ -186,6 +192,10 @@ export function MessageComposer({
   uploading,
   replyingTo,
   onCancelReply,
+  editingMessage,
+  onCancelEdit,
+  onSaveEdit,
+  editBusy = false,
 }: Props) {
   const [text, setText] = useState("");
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -197,6 +207,14 @@ export function MessageComposer({
   const emojiPanelRef = useRef<HTMLDivElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!editingMessage) return;
+    setText(editingMessage.text ?? "");
+    setImagePreview(null);
+    setPendingFile(null);
+    setError(null);
+  }, [editingMessage?.id]);
 
   useEffect(() => {
     if (!emojiOpen) return;
@@ -278,6 +296,7 @@ export function MessageComposer({
   }
 
   async function onPaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
+    if (editingMessage) return;
     const cd = e.clipboardData;
     if (!cd) return;
 
@@ -315,8 +334,34 @@ export function MessageComposer({
     return null;
   }
 
+  function handleCancelEdit() {
+    setText("");
+    onCancelEdit?.();
+  }
+
   async function submit() {
     const trimmed = text;
+
+    if (editingMessage && onSaveEdit) {
+      if (!trimmed.trim()) {
+        setError("Message cannot be empty.");
+        return;
+      }
+      const textErr = validateTextBytes(trimmed);
+      if (textErr) {
+        setError(textErr);
+        return;
+      }
+      setError(null);
+      try {
+        await onSaveEdit(editingMessage.id, trimmed);
+        setText("");
+      } catch {
+        /* parent sets sendError */
+      }
+      return;
+    }
+
     const replyId = replyingTo?.id;
 
     if (pendingFile) {
@@ -357,13 +402,16 @@ export function MessageComposer({
   function onKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      if (!disabled && !uploading) void submit();
+      if (!disabled && !uploading && !editBusy) void submit();
     }
   }
 
-  const busy = disabled || uploading;
+  const busy = disabled || uploading || editBusy;
+  const attachmentsBlocked = !!editingMessage;
   const canSend =
-    pendingFile || imagePreview || text.trim().length > 0;
+    editingMessage != null
+      ? text.trim().length > 0
+      : pendingFile || imagePreview || text.trim().length > 0;
 
   const replyLabel = replyingTo
     ? replyingTo.senderDisplayName ??
@@ -388,7 +436,34 @@ export function MessageComposer({
         {error ? (
           <p className="mb-2 text-sm text-red-300">{error}</p>
         ) : null}
-        {replyingTo ? (
+        {editingMessage ? (
+          <div className="mb-3 flex items-start justify-between gap-2 rounded-lg border border-amber-500/30 border-l-[3px] border-l-amber-400/80 bg-slate-900/80 py-2 pl-3 pr-2 shadow-inner ring-1 ring-inset ring-white/5">
+            <div className="min-w-0">
+              <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-amber-300/95">
+                Editing message
+              </p>
+              <p className="mt-1 line-clamp-2 border-t border-white/10 pt-1.5 text-xs italic text-slate-400">
+                {editingMessage.text?.trim()
+                  ? editingMessage.text
+                  : editingMessage.attachments?.length
+                    ? "📎 Attachment"
+                    : editingMessage.imageDataUrl
+                      ? "📷 Image"
+                      : "…"}
+              </p>
+            </div>
+            {onCancelEdit ? (
+              <button
+                type="button"
+                className="shrink-0 rounded-lg px-2 py-1 text-xs text-slate-400 hover:bg-white/10 hover:text-white"
+                onClick={() => handleCancelEdit()}
+              >
+                Cancel
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+        {!editingMessage && replyingTo ? (
           <div className="mb-3 flex items-start justify-between gap-2 rounded-lg border border-sky-500/30 border-l-[3px] border-l-sky-400/80 bg-slate-900/80 py-2 pl-3 pr-2 shadow-inner ring-1 ring-inset ring-white/5">
             <div className="min-w-0">
               <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-sky-300/95">
@@ -415,7 +490,7 @@ export function MessageComposer({
             ) : null}
           </div>
         ) : null}
-        {imagePreview ? (
+        {!editingMessage && imagePreview ? (
           <div className="relative mb-3 inline-block max-h-40 overflow-hidden rounded-xl border border-white/10 bg-slate-900/50">
             <img
               src={imagePreview}
@@ -431,7 +506,7 @@ export function MessageComposer({
             </button>
           </div>
         ) : null}
-        {pendingFile ? (
+        {!editingMessage && pendingFile ? (
           <div className="mb-3 flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-slate-900/50 px-3 py-2 text-sm text-slate-200">
             <span className="min-w-0 truncate" title={pendingFile.name}>
               {pendingFile.name}
@@ -454,7 +529,9 @@ export function MessageComposer({
           id="chat-message"
           rows={4}
           disabled={busy}
-          placeholder="Type your message…"
+          placeholder={
+            editingMessage ? "Edit your message…" : "Type your message…"
+          }
           enterKeyHint="send"
           autoComplete="off"
           className="mb-3 min-h-[6.5rem] w-full resize-y rounded-xl border border-white/10 bg-slate-900/90 px-3 py-3 text-[15px] leading-relaxed text-white placeholder:text-slate-500 outline-none ring-sky-500/30 focus:border-sky-500/40 focus:ring-2 disabled:opacity-50 sm:min-h-[5.5rem]"
@@ -486,7 +563,7 @@ export function MessageComposer({
             <div className="relative" ref={emojiPanelRef}>
               <button
                 type="button"
-                disabled={busy}
+                disabled={busy || attachmentsBlocked}
                 aria-expanded={emojiOpen}
                 aria-haspopup="dialog"
                 aria-label="Insert emoji"
@@ -548,7 +625,7 @@ export function MessageComposer({
             </div>
             <button
               type="button"
-              disabled={busy}
+              disabled={busy || attachmentsBlocked}
               onClick={() => imageInputRef.current?.click()}
               className="flex items-center justify-center gap-2 rounded-xl border border-white/15 bg-slate-800/80 px-4 py-2.5 text-sm font-medium text-slate-200 transition hover:bg-slate-700 disabled:opacity-50 sm:inline-flex sm:justify-start"
             >
@@ -557,7 +634,7 @@ export function MessageComposer({
             </button>
             <button
               type="button"
-              disabled={busy}
+              disabled={busy || attachmentsBlocked}
               onClick={() => fileInputRef.current?.click()}
               className="flex items-center justify-center gap-2 rounded-xl border border-white/15 bg-slate-800/80 px-4 py-2.5 text-sm font-medium text-slate-200 transition hover:bg-slate-700 disabled:opacity-50 sm:inline-flex sm:justify-start"
             >
@@ -571,7 +648,13 @@ export function MessageComposer({
             onClick={() => void submit()}
             className="w-full rounded-xl bg-sky-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-sky-900/25 transition hover:bg-sky-500 disabled:opacity-50 sm:w-auto sm:min-w-[7.5rem]"
           >
-            {uploading ? "Sending…" : "Send"}
+            {uploading
+              ? "Sending…"
+              : editingMessage
+                ? editBusy
+                  ? "Saving…"
+                  : "Save"
+                : "Send"}
           </button>
         </div>
       </div>

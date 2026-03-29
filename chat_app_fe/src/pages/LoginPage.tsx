@@ -44,7 +44,7 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-violet-950 px-4">
       <div className="w-full max-w-md rounded-2xl border border-white/10 bg-slate-900/80 p-8 shadow-2xl backdrop-blur-md">
-        <div className="mb-6">
+        <div className="mb-6 flex justify-center">
           <BrandLogo />
         </div>
         <h1 className="text-center text-2xl font-semibold tracking-tight text-white">

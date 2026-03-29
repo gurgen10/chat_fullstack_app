@@ -60,6 +60,14 @@ export function ActiveChat({
   const [sendError, setSendError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
+  const [editingMessage, setEditingMessage] = useState<ChatMessage | null>(
+    null,
+  );
+  const [editSaving, setEditSaving] = useState(false);
+
+  useEffect(() => {
+    setEditingMessage(null);
+  }, [friend.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -67,7 +75,11 @@ export function ActiveChat({
       .then((thread) => {
         if (!cancelled) {
           setLoadError(null);
-          setMessages(thread.messages);
+          // Merge so a slow initial fetch cannot overwrite messages already
+          // appended from real-time `chat:message` (e.g. first send while loading).
+          setMessages((prev) =>
+            mergeLatestPageWithExisting(prev, thread.messages),
+          );
           setHasMore(thread.hasMore);
           setCanSend(thread.canSend);
           setReadOnlyReason(thread.readOnlyReason);
@@ -126,6 +138,7 @@ export function ActiveChat({
       const p = payload as { messageId?: string; threadId?: string };
       if (p.threadId !== tid || !p.messageId) return;
       setMessages((prev) => prev.filter((m) => m.id !== p.messageId));
+      setEditingMessage((em) => (em?.id === p.messageId ? null : em));
     };
 
     const onEdited = (msg: ChatMessage) => {
@@ -196,6 +209,19 @@ export function ActiveChat({
     }
   }, []);
 
+  const saveEditedMessage = useCallback(
+    async (messageId: string, text: string) => {
+      setEditSaving(true);
+      try {
+        await handleEditMessage(messageId, text);
+        setEditingMessage(null);
+      } finally {
+        setEditSaving(false);
+      }
+    },
+    [handleEditMessage],
+  );
+
   const sendMessage = useCallback(
     async (payload: {
       text: string;
@@ -207,12 +233,13 @@ export function ActiveChat({
         setSendError(null);
         setUploading(true);
         try {
-          await apiUploadDmAttachment(
+          const saved = await apiUploadDmAttachment(
             friend.id,
             payload.file,
             payload.text || undefined,
             payload.replyToMessageId,
           );
+          setMessages((prev) => appendIncomingMessage(prev, saved));
         } catch (err) {
           setSendError(
             err instanceof Error ? err.message : "Could not send file.",
@@ -302,8 +329,14 @@ export function ActiveChat({
             variant="dm"
             canDeleteMessage={(m) => m.senderId === session.userId}
             onDeleteMessage={handleDeleteMessage}
-            onEditMessage={handleEditMessage}
-            onReply={(m) => setReplyingTo(m)}
+            onStartEdit={(m) => {
+              setReplyingTo(null);
+              setEditingMessage(m);
+            }}
+            onReply={(m) => {
+              setEditingMessage(null);
+              setReplyingTo(m);
+            }}
             hasMoreHistory={hasMore}
             loadingOlderHistory={loadingOlder}
             onLoadOlder={loadOlderMessages}
@@ -321,11 +354,16 @@ export function ActiveChat({
         </p>
       ) : null}
       <MessageComposer
+        key={friend.id}
         onSend={sendMessage}
         disabled={!canSend}
         uploading={uploading}
         replyingTo={replyingTo}
         onCancelReply={() => setReplyingTo(null)}
+        editingMessage={editingMessage}
+        onCancelEdit={() => setEditingMessage(null)}
+        onSaveEdit={saveEditedMessage}
+        editBusy={editSaving}
       />
     </div>
   );

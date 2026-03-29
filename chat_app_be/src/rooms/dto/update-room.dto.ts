@@ -9,6 +9,6 @@ export class UpdateRoomDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(4000)
+  @MaxLength(500)
   description?: string;
 }

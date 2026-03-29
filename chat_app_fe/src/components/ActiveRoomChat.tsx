@@ -53,8 +53,16 @@ export function ActiveRoomChat({
   const [uploading, setUploading] = useState(false);
   const [modOpen, setModOpen] = useState(false);
   const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
+  const [editingMessage, setEditingMessage] = useState<ChatMessage | null>(
+    null,
+  );
+  const [editSaving, setEditSaving] = useState(false);
 
   const tid = roomThreadId(roomId);
+
+  useEffect(() => {
+    setEditingMessage(null);
+  }, [roomId]);
 
   const isRoomStaff = isRoomStaffRole(room.myRole);
   const isRoomOwnerOrAdmin =
@@ -117,6 +125,19 @@ export function ActiveRoomChat({
     }
   }, []);
 
+  const saveEditedMessage = useCallback(
+    async (messageId: string, text: string) => {
+      setEditSaving(true);
+      try {
+        await handleEditMessage(messageId, text);
+        setEditingMessage(null);
+      } finally {
+        setEditSaving(false);
+      }
+    },
+    [handleEditMessage],
+  );
+
   const syncLatestFromServer = useCallback(async () => {
     try {
       const thread = await apiRoomMessages(roomId);
@@ -147,7 +168,9 @@ export function ActiveRoomChat({
       .then((thread) => {
         if (!cancelled) {
           setLoadError(null);
-          setMessages(thread.messages);
+          setMessages((prev) =>
+            mergeLatestPageWithExisting(prev, thread.messages),
+          );
           setHasMore(thread.hasMore);
         }
       })
@@ -192,6 +215,7 @@ export function ActiveRoomChat({
       const p = payload as { messageId?: string; threadId?: string };
       if (p.threadId !== tid || !p.messageId) return;
       setMessages((prev) => prev.filter((m) => m.id !== p.messageId));
+      setEditingMessage((em) => (em?.id === p.messageId ? null : em));
     };
 
     const onEdited = (msg: ChatMessage) => {
@@ -233,12 +257,13 @@ export function ActiveRoomChat({
         setSendError(null);
         setUploading(true);
         try {
-          await apiUploadRoomAttachment(
+          const saved = await apiUploadRoomAttachment(
             roomId,
             payload.file,
             payload.text || undefined,
             payload.replyToMessageId,
           );
+          setMessages((prev) => appendIncomingMessage(prev, saved));
         } catch (err) {
           setSendError(
             err instanceof Error ? err.message : "Could not send file.",
@@ -344,8 +369,14 @@ export function ActiveRoomChat({
             variant="room"
             canDeleteMessage={canDeleteMessage}
             onDeleteMessage={handleDeleteMessage}
-            onEditMessage={handleEditMessage}
-            onReply={(m) => setReplyingTo(m)}
+            onStartEdit={(m) => {
+              setReplyingTo(null);
+              setEditingMessage(m);
+            }}
+            onReply={(m) => {
+              setEditingMessage(null);
+              setReplyingTo(m);
+            }}
             hasMoreHistory={hasMore}
             loadingOlderHistory={loadingOlder}
             onLoadOlder={loadOlderMessages}
@@ -358,11 +389,16 @@ export function ActiveRoomChat({
         </p>
       ) : null}
       <MessageComposer
+        key={roomId}
         onSend={sendMessage}
         disabled={!!loadError}
         uploading={uploading}
         replyingTo={replyingTo}
         onCancelReply={() => setReplyingTo(null)}
+        editingMessage={editingMessage}
+        onCancelEdit={() => setEditingMessage(null)}
+        onSaveEdit={saveEditedMessage}
+        editBusy={editSaving}
       />
     </div>
   );

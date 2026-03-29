@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import { useAuth } from "../hooks/useAuth";
 import {
   apiAcceptFriendRequest,
@@ -11,6 +18,7 @@ import {
   apiOutgoingFriendRequests,
   apiRemoveFriend,
   apiSendFriendRequest,
+  type SendFriendRequestResult,
 } from "../lib/api";
 import { usePresenceMap } from "../hooks/usePresenceMap";
 import { useUnreadSummary } from "../hooks/useUnreadSummary";
@@ -40,6 +48,58 @@ function nu(u: {
         : new Date(u.createdAt).getTime(),
     avatarUrl: u.avatarUrl ?? null,
   };
+}
+
+function mergeSendFriendRequestResult(
+  meId: string,
+  data: SendFriendRequestResult,
+  setFriends: Dispatch<SetStateAction<PublicUser[]>>,
+  setIncoming: Dispatch<SetStateAction<FriendRequestIncoming[]>>,
+  setOutgoing: Dispatch<SetStateAction<FriendRequestOutgoing[]>>,
+) {
+  const req = data.requester;
+  const add = data.addressee;
+  const createdAt =
+    typeof data.createdAt === "string"
+      ? data.createdAt
+      : new Date(data.createdAt as unknown as string).toISOString();
+
+  if (data.status === "accepted") {
+    const peer = req.id === meId ? add : req;
+    setFriends((prev) => {
+      if (prev.some((f) => f.id === peer.id)) return prev;
+      return [...prev, nu(peer)];
+    });
+    setIncoming((prev) => prev.filter((x) => x.id !== data.id));
+    setOutgoing((prev) => prev.filter((x) => x.id !== data.id));
+    return;
+  }
+
+  if (data.status === "pending") {
+    if (req.id === meId) {
+      const row: FriendRequestOutgoing = {
+        id: data.id,
+        requestMessage: data.requestMessage,
+        createdAt,
+        addressee: nu(add),
+      };
+      setOutgoing((prev) => {
+        if (prev.some((x) => x.id === data.id)) return prev;
+        return [row, ...prev];
+      });
+    } else if (add.id === meId) {
+      const row: FriendRequestIncoming = {
+        id: data.id,
+        requestMessage: data.requestMessage,
+        createdAt,
+        requester: nu(req),
+      };
+      setIncoming((prev) => {
+        if (prev.some((x) => x.id === data.id)) return prev;
+        return [row, ...prev];
+      });
+    }
+  }
 }
 
 function MenuIcon({ className }: { className?: string }) {
@@ -225,8 +285,17 @@ export default function ChatPage() {
           busy={busy}
           onSelectFriend={handleSelectFriend}
           onSendFriendRequest={async (body) => {
-            await withBusy(() => apiSendFriendRequest(body));
-            await refreshContacts();
+            await withBusy(async () => {
+              const result = await apiSendFriendRequest(body);
+              mergeSendFriendRequestResult(
+                session.userId,
+                result,
+                setFriends,
+                setIncoming,
+                setOutgoing,
+              );
+              await refreshContacts();
+            });
           }}
           onAcceptRequest={async (id) => {
             await withBusy(() => apiAcceptFriendRequest(id));
@@ -248,11 +317,21 @@ export default function ChatPage() {
             await withBusy(() => apiBanUser(body));
             await refreshContacts();
           }}
-          onRequestFromDiscover={async (u) => {
-            await withBusy(() =>
-              apiSendFriendRequest({ userId: u.id, message: undefined }),
-            );
-            await refreshContacts();
+          onRequestFromDiscover={async (u, message) => {
+            await withBusy(async () => {
+              const result = await apiSendFriendRequest({
+                userId: u.id,
+                message: message?.trim() || undefined,
+              });
+              mergeSendFriendRequestResult(
+                session.userId,
+                result,
+                setFriends,
+                setIncoming,
+                setOutgoing,
+              );
+              await refreshContacts();
+            });
           }}
         />
       </aside>

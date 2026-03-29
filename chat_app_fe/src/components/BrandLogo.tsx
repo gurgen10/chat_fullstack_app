@@ -8,14 +8,14 @@ type Props = {
 export function BrandLogo({ className, variant = "default" }: Props) {
   const base =
     variant === "compact"
-      ? "h-8 w-auto max-w-[min(100%,17rem)] object-contain object-center"
-      : "mx-auto h-10 w-auto max-w-[min(100%,22rem)] object-contain object-center";
+      ? "h-7 w-auto max-w-[min(100%,14rem)] object-contain object-center"
+      : "mx-auto h-8 w-auto max-w-[min(100%,16rem)] object-contain object-center";
   return (
     <img
       src="/logo.svg"
       alt="Gug DataArt"
-      width={420}
-      height={56}
+      width={340}
+      height={40}
       className={className ? `${base} ${className}` : base}
     />
   );

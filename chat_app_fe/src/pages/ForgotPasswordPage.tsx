@@ -7,20 +7,18 @@ export default function ForgotPasswordPage() {
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const [pending, setPending] = useState(false);
-  const [devHint, setDevHint] = useState<string | null>(null);
+  const [devResetUrl, setDevResetUrl] = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    setDevHint(null);
+    setDevResetUrl(null);
     setPending(true);
     try {
       const res = await apiRequestPasswordReset(email.trim());
       setDone(true);
       if (res.resetUrl) {
-        setDevHint(
-          `Development: open this link to reset your password: ${res.resetUrl}`,
-        );
+        setDevResetUrl(res.resetUrl);
       }
     } catch (err) {
       setError(
@@ -48,10 +46,19 @@ export default function ForgotPasswordPage() {
               If an account exists for that address, we have sent a password
               reset link. Check your inbox and spam folder.
             </p>
-            {devHint ? (
-              <p className="break-all rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
-                {devHint}
-              </p>
+            {devResetUrl ? (
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+                <p className="mb-2 leading-relaxed">
+                  Development: use the link below to open the password reset
+                  screen (email delivery is not configured).
+                </p>
+                <a
+                  href={devResetUrl}
+                  className="inline-block font-semibold text-amber-200 underline decoration-amber-400/80 underline-offset-2 hover:text-white"
+                >
+                  Open Reset View
+                </a>
+              </div>
             ) : null}
             <Link
               to="/login"

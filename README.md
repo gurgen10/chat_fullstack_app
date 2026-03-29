@@ -1,14 +1,16 @@
 # Chat App
 
+After running the app in a Docker container, open it at [http://localhost:5173](http://localhost:5173).
+
 Full-stack chat application: **NestJS** API with **Prisma** / **PostgreSQL**, and a **React** (**Vite**) web client with real-time messaging.
 
 ## Repository layout
 
-| Path | Description |
-|------|-------------|
-| `chat_app_be/` | Backend (NestJS, JWT auth, rooms, friends, WebSockets) |
-| `chat_app_fe/` | Frontend (Vite, React, Socket.IO client) |
-| `docker-compose.yml` | Postgres, dependency install, backend, and frontend dev stack |
+| Path                             | Description                                                    |
+| -------------------------------- | -------------------------------------------------------------- |
+| `chat_app_be/`                   | Backend (NestJS, JWT auth, rooms, friends, WebSockets)         |
+| `chat_app_fe/`                   | Frontend (Vite, React, Socket.IO client)                       |
+| `docker-compose.yml`             | Postgres, dependency install, backend, and frontend dev stack  |
 | `scripts/docker-install-deps.sh` | Installs npm dependencies into named volumes (used by Compose) |
 
 ## Quick start with Docker

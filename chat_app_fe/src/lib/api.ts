@@ -133,7 +133,11 @@ async function request<T>(
 
   let res: Response;
   try {
-    res = await fetch(resolveApiUrl(path), { ...init, headers });
+    res = await fetch(resolveApiUrl(path), {
+      ...init,
+      headers,
+      cache: "no-store",
+    });
   } catch (e) {
     const devHint =
       import.meta.env.DEV && !configuredApiOrigin()
@@ -315,12 +319,22 @@ export async function apiOutgoingFriendRequests(): Promise<
   return request<FriendRequestOutgoing[]>("/friends/requests/outgoing");
 }
 
+/** Response from POST /friends/requests — used to update UI without waiting for a refetch. */
+export type SendFriendRequestResult = {
+  id: string;
+  status: "pending" | "accepted" | string;
+  requestMessage: string | null;
+  createdAt: string;
+  requester: AuthResponseUser;
+  addressee: AuthResponseUser;
+};
+
 export async function apiSendFriendRequest(body: {
   username?: string;
   userId?: string;
   message?: string;
-}): Promise<unknown> {
-  return request("/friends/requests", {
+}): Promise<SendFriendRequestResult> {
+  return request<SendFriendRequestResult>("/friends/requests", {
     method: "POST",
     body: JSON.stringify(body),
   });

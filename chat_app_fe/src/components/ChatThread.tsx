@@ -24,8 +24,8 @@ type Props = {
   /** If set, "Delete" is shown when this returns true (own message or moderator). */
   canDeleteMessage?: (m: ChatMessage) => boolean;
   onDeleteMessage?: (messageId: string) => void;
-  /** Own messages only; shows Edit and PATCHes new text. */
-  onEditMessage?: (messageId: string, text: string) => Promise<void>;
+  /** Own messages only; opens composer to edit the message text. */
+  onStartEdit?: (m: ChatMessage) => void;
   /** Reply / reference: compose a reply to this message. */
   onReply?: (m: ChatMessage) => void;
   /** Persistent history: more rows exist on the server. */
@@ -135,7 +135,7 @@ export function ChatThread({
   variant = "dm",
   canDeleteMessage,
   onDeleteMessage,
-  onEditMessage,
+  onStartEdit,
   onReply,
   hasMoreHistory = false,
   loadingOlderHistory = false,
@@ -151,9 +151,6 @@ export function ChatThread({
   }>({ firstId: undefined, scrollHeight: 0 });
   const skipScrollToBottomRef = useRef(false);
   const loadOlderCooldownRef = useRef(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editDraft, setEditDraft] = useState("");
-  const [savingEdit, setSavingEdit] = useState(false);
   const [deleteMessageId, setDeleteMessageId] = useState<string | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
 
@@ -163,22 +160,8 @@ export function ChatThread({
   }, [conversationKey]);
 
   useEffect(() => {
-    setEditingId(null);
-    setEditDraft("");
-    setSavingEdit(false);
     setDeleteMessageId(null);
   }, [conversationKey]);
-
-  const saveEdit = useCallback(async () => {
-    if (!editingId || !onEditMessage) return;
-    setSavingEdit(true);
-    try {
-      await onEditMessage(editingId, editDraft);
-      setEditingId(null);
-    } finally {
-      setSavingEdit(false);
-    }
-  }, [editingId, editDraft, onEditMessage]);
 
   useLayoutEffect(() => {
     const el = scrollRootRef.current;
@@ -340,26 +323,7 @@ export function ChatThread({
               {m.attachments?.length ? (
                 <ChatAttachmentsList items={m.attachments} mine={mine} />
               ) : null}
-              {editingId === m.id ? (
-                <textarea
-                  value={editDraft}
-                  onChange={(e) => setEditDraft(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-                      e.preventDefault();
-                      void saveEdit();
-                    }
-                  }}
-                  disabled={savingEdit}
-                  rows={4}
-                  className={`mt-1 w-full resize-y rounded-lg border px-2 py-1.5 text-sm leading-relaxed text-slate-100 outline-none ring-0 focus:border-sky-400/80 ${
-                    mine
-                      ? "border-white/25 bg-sky-950/50 placeholder:text-white/40"
-                      : "border-white/15 bg-slate-950/50 placeholder:text-slate-500"
-                  }`}
-                  aria-label="Edit message"
-                />
-              ) : m.text ? (
+              {m.text ? (
                 <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
                   {m.text}
                 </p>
@@ -370,75 +334,41 @@ export function ChatThread({
                 }`}
               >
                 <span className="flex flex-wrap items-center gap-2">
-                  {editingId === m.id ? (
-                    <>
-                      <button
-                        type="button"
-                        disabled={savingEdit}
-                        className={
-                          mine
-                            ? "text-white/80 underline-offset-2 hover:underline disabled:opacity-50"
-                            : "text-slate-400 underline-offset-2 hover:text-slate-200 hover:underline disabled:opacity-50"
-                        }
-                        onClick={() => void saveEdit()}
-                      >
-                        Save
-                      </button>
-                      <button
-                        type="button"
-                        disabled={savingEdit}
-                        className={
-                          mine
-                            ? "text-white/80 underline-offset-2 hover:underline disabled:opacity-50"
-                            : "text-slate-400 underline-offset-2 hover:text-slate-200 hover:underline disabled:opacity-50"
-                        }
-                        onClick={() => setEditingId(null)}
-                      >
-                        Cancel
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      {onReply ? (
-                        <button
-                          type="button"
-                          className={
-                            mine
-                              ? "text-white/80 underline-offset-2 hover:underline"
-                              : "text-slate-400 underline-offset-2 hover:text-slate-200 hover:underline"
-                          }
-                          onClick={() => onReply(m)}
-                        >
-                          Reply
-                        </button>
-                      ) : null}
-                      {mine && onEditMessage ? (
-                        <button
-                          type="button"
-                          className="text-white/80 underline-offset-2 hover:underline"
-                          onClick={() => {
-                            setEditingId(m.id);
-                            setEditDraft(m.text);
-                          }}
-                        >
-                          Edit
-                        </button>
-                      ) : null}
-                      {canDeleteMessage?.(m) && onDeleteMessage ? (
-                        <button
-                          type="button"
-                          className={
-                            mine
-                              ? "text-white/80 underline-offset-2 hover:underline"
-                              : "text-slate-400 underline-offset-2 hover:text-slate-200 hover:underline"
-                          }
-                          onClick={() => setDeleteMessageId(m.id)}
-                        >
-                          Delete
-                        </button>
-                      ) : null}
-                    </>
-                  )}
+                  {onReply ? (
+                    <button
+                      type="button"
+                      className={
+                        mine
+                          ? "text-white/80 underline-offset-2 hover:underline"
+                          : "text-slate-400 underline-offset-2 hover:text-slate-200 hover:underline"
+                      }
+                      onClick={() => onReply(m)}
+                    >
+                      Reply
+                    </button>
+                  ) : null}
+                  {mine && onStartEdit ? (
+                    <button
+                      type="button"
+                      className="text-white/80 underline-offset-2 hover:underline"
+                      onClick={() => onStartEdit(m)}
+                    >
+                      Edit
+                    </button>
+                  ) : null}
+                  {canDeleteMessage?.(m) && onDeleteMessage ? (
+                    <button
+                      type="button"
+                      className={
+                        mine
+                          ? "text-white/80 underline-offset-2 hover:underline"
+                          : "text-slate-400 underline-offset-2 hover:text-slate-200 hover:underline"
+                      }
+                      onClick={() => setDeleteMessageId(m.id)}
+                    >
+                      Delete
+                    </button>
+                  ) : null}
                 </span>
                 <span
                   className={`inline-flex flex-wrap items-center gap-x-2 gap-y-0.5 ${

@@ -244,8 +244,11 @@ export function FriendsListPanel({
         </span>
         <div className="min-w-0">
           <h2 className="text-sm font-semibold tracking-tight text-white">
-            {friends.length} friend{friends.length === 1 ? "" : "s"}
+            {title}
           </h2>
+          <p className="text-xs text-slate-500">
+            {friends.length} friend{friends.length === 1 ? "" : "s"}
+          </p>
         </div>
       </div>
 

@@ -1,15 +1,24 @@
-FROM node:22-bookworm-slim
-
+FROM node:22-bookworm-slim AS build
 WORKDIR /app
 
 COPY package*.json ./
 RUN npm ci
 
 COPY index.html vite.config.ts tsconfig*.json ./
-COPY server ./server
 COPY src ./src
 COPY public ./public
 
-EXPOSE 5173
+# Set at build time for production API origin if needed:
+#   docker build --build-arg VITE_API_ORIGIN=https://api.example.com ...
+ARG VITE_API_ORIGIN
+ENV VITE_API_ORIGIN=${VITE_API_ORIGIN}
 
-CMD ["npm", "run", "dev:client", "--", "--host", "0.0.0.0", "--port", "5173"]
+RUN npm run build
+
+FROM nginx:1.27-alpine AS runner
+WORKDIR /usr/share/nginx/html
+
+COPY --from=build /app/dist ./
+
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]

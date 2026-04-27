@@ -9,7 +9,8 @@ services:
       - backend_node_modules:/workspace/chat_app_be/node_modules
       - frontend_node_modules:/workspace/chat_app_fe/node_modules
       - ./scripts/docker-install-deps.sh:/workspace/docker-install-deps.sh:ro
-    command: ["/bin/sh", "/workspace/docker-install-deps.sh"]
+    # Normalize CRLF to LF at runtime so this works on Windows checkouts.
+    command: ["/bin/sh", "-c", "tr -d '\\r' < /workspace/docker-install-deps.sh | /bin/sh"]
     restart: "no"
 
   postgres:
@@ -67,7 +68,7 @@ services:
       context: ./chat_app_fe
       dockerfile: Dockerfile
     ports:
-      - "5173:5173"
+      - "5173:80"
     environment:
       # Dev proxy target inside the Docker network (do not use localhost here).
       API_UPSTREAM: http://backend:3000
@@ -77,13 +78,7 @@ services:
     depends_on:
       backend:
         condition: service_healthy
-    # Ensure API_UPSTREAM is set for the Vite process (proxy target; localhost here = FE container only → 502).
-    command:
-      - sh
-      - -c
-      - |
-        export API_UPSTREAM=http://backend:3000
-        exec npm run dev:client -- --host 0.0.0.0 --port 5173
+    # Use Dockerfile CMD (nginx); do not override with npm (runner image has no Node).
 
 volumes:
   postgres_data:

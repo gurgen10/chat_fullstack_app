@@ -14,10 +14,11 @@ async function bootstrap() {
   app.enableCors({
     origin: [
       'http://localhost:3000',
+      'http://localhost:5173',
       process.env.FRONTEND_ORIGIN,
     ],
     credentials: true,
-});
+  });
 
   app.useGlobalPipes(
     new ValidationPipe({
@@ -33,10 +34,10 @@ async function bootstrap() {
   const config = app.get(ConfigService);
   const port = config.get<number>('PORT') ?? 3000;
 
-   console.log("[boot] NODE_ENV:", process.env.NODE_ENV);
-    console.log("[boot] PORT:", port);
-    console.log("[boot] DATABASE_URL set:", Boolean(process.env.DATABASE_URL));
-    console.log("[boot] JWT_SECRET set:", Boolean(process.env.JWT_SECRET));
+  console.log("[boot] NODE_ENV:", process.env.NODE_ENV);
+  console.log("[boot] PORT:", port);
+  console.log("[boot] DATABASE_URL set:", Boolean(process.env.DATABASE_URL));
+  console.log("[boot] JWT_SECRET set:", Boolean(process.env.JWT_SECRET));
   // Bind all interfaces so other Docker containers can reach the API (not only 127.0.0.1).
   await app.listen(port, '0.0.0.0');
 }

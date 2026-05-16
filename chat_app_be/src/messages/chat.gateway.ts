@@ -19,15 +19,14 @@ type PresenceState = 'online' | 'afk';
 @WebSocketGateway({
   cors: { origin: true, credentials: true },
   path: '/socket.io',
-  /** Spec §3.2 — presence / offline detection within ~2s after transport loss. */
-  pingInterval: 1000,
-  pingTimeout: 1500,
+  /** Presence uses a short ping interval, but avoid false disconnects on real networks. */
+  pingInterval: 3000,
+  pingTimeout: 5000,
   /** Default 1 MB is too small for §3.4 inline images (base64 in JSON). */
   maxHttpBufferSize: 6 * 1024 * 1024,
 })
 export class ChatGateway
-  implements OnGatewayConnection, OnGatewayDisconnect
-{
+  implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server!: Server;
 
@@ -44,7 +43,7 @@ export class ChatGateway
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
     private readonly messages: MessagesService,
-  ) {}
+  ) { }
 
   private aggregateForUser(userId: string): PresenceState | undefined {
     let anyOnline = false;
@@ -125,10 +124,8 @@ export class ChatGateway
   }
 
   emitDmMessage(senderId: string, peerId: string, msg: ChatMessageDto) {
-    this.server
-      .to(`user:${senderId}`)
-      .to(`user:${peerId}`)
-      .emit('chat:message', msg);
+    this.server.to(`user:${senderId}`).emit('chat:message', msg);
+    this.server.to(`user:${peerId}`).emit('chat:message', msg);
     void this.messages.resolveDmRoomId(senderId, peerId).then((rid) => {
       if (rid) void this.notifyUnreadRefresh(rid);
     });
@@ -163,10 +160,14 @@ export class ChatGateway
     threadId: string,
   ) {
     const [a, b] = userIds;
-    this.server
-      .to(`user:${a}`)
-      .to(`user:${b}`)
-      .emit('message:deleted', { messageId, threadId });
+    this.server.to(`user:${a}`).emit('message:deleted', {
+      messageId,
+      threadId,
+    });
+    this.server.to(`user:${b}`).emit('message:deleted', {
+      messageId,
+      threadId,
+    });
   }
 
   emitMessageEdited(msg: ChatMessageDto) {
@@ -179,7 +180,8 @@ export class ChatGateway
     const parts = threadId.split(':');
     if (parts.length === 2) {
       const [a, b] = parts;
-      this.server.to(`user:${a}`).to(`user:${b}`).emit('message:edited', msg);
+      this.server.to(`user:${a}`).emit('message:edited', msg);
+      this.server.to(`user:${b}`).emit('message:edited', msg);
     }
   }
 

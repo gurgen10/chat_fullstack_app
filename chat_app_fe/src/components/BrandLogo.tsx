@@ -4,7 +4,7 @@ type Props = {
   variant?: "default" | "compact";
 };
 
-/** Wordmark: Gug (sun) · DataArt (moon). Asset: `/public/logo.svg`. */
+/** Wordmark: Gug Chat. Asset: `/public/logo.svg`. */
 export function BrandLogo({ className, variant = "default" }: Props) {
   const base =
     variant === "compact"
@@ -13,7 +13,7 @@ export function BrandLogo({ className, variant = "default" }: Props) {
   return (
     <img
       src="/logo.svg"
-      alt="Gug DataArt"
+      alt="Gug Chat"
       width={340}
       height={40}
       className={className ? `${base} ${className}` : base}

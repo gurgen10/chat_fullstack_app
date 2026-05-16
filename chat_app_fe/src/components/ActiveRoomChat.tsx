@@ -12,7 +12,11 @@ import {
   mergeLatestPageWithExisting,
   mergeOlderMessages,
 } from "../lib/chatMessages";
-import { connectSocket, getSocket } from "../lib/socketClient";
+import {
+  connectSocket,
+  emitWithAck,
+  getSocket,
+} from "../lib/socketClient";
 import type { ChatMessage, RoomDetail, Session } from "../types";
 import { ChatThread } from "./ChatThread";
 import { MessageComposer } from "./MessageComposer";
@@ -276,26 +280,24 @@ export function ActiveRoomChat({
 
       if (!payload.text && !payload.imageDataUrl) return;
       setSendError(null);
-      const socket = getSocket() ?? connectSocket();
-      socket.emit(
-        "room:send",
-        {
+      try {
+        const res = await emitWithAck("room:send", {
           roomId,
           text: payload.text,
           imageDataUrl: payload.imageDataUrl,
           replyToMessageId: payload.replyToMessageId,
-        },
-        (res: unknown) => {
-          if (
-            res &&
-            typeof res === "object" &&
-            "error" in res &&
-            (res as { error?: string | null }).error
-          ) {
-            setSendError(String((res as { error: string }).error));
-          }
-        },
-      );
+        });
+        if (
+          res &&
+          typeof res === "object" &&
+          "error" in res &&
+          (res as { error?: string | null }).error
+        ) {
+          setSendError(String((res as { error: string }).error));
+        }
+      } catch (err) {
+        setSendError(err instanceof Error ? err.message : "Could not send message.");
+      }
     },
     [roomId],
   );

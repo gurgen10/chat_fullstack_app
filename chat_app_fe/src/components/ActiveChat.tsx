@@ -12,7 +12,11 @@ import {
   mergeLatestPageWithExisting,
   mergeOlderMessages,
 } from "../lib/chatMessages";
-import { connectSocket, getSocket } from "../lib/socketClient";
+import {
+  connectSocket,
+  emitWithAck,
+  getSocket,
+} from "../lib/socketClient";
 import type {
   ChatMessage,
   ContactPresence,
@@ -252,26 +256,24 @@ export function ActiveChat({
 
       if (!payload.text && !payload.imageDataUrl) return;
       setSendError(null);
-      const socket = getSocket() ?? connectSocket();
-      socket.emit(
-        "chat:send",
-        {
+      try {
+        const res = await emitWithAck("chat:send", {
           peerId: friend.id,
           text: payload.text,
           imageDataUrl: payload.imageDataUrl,
           replyToMessageId: payload.replyToMessageId,
-        },
-        (res: unknown) => {
-          if (
-            res &&
-            typeof res === "object" &&
-            "error" in res &&
-            (res as { error?: string | null }).error
-          ) {
-            setSendError(String((res as { error: string }).error));
-          }
-        },
-      );
+        });
+        if (
+          res &&
+          typeof res === "object" &&
+          "error" in res &&
+          (res as { error?: string | null }).error
+        ) {
+          setSendError(String((res as { error: string }).error));
+        }
+      } catch (err) {
+        setSendError(err instanceof Error ? err.message : "Could not send message.");
+      }
     },
     [friend.id],
   );
